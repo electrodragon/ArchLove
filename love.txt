@@ -1,0 +1,161 @@
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Step 1: Change Keyboard
+
+	Default Kbd in live session = "US"
+	
+	$ ls /usr/share/kbd/keymaps/**/*.map.gz # Lists all supported kbd layouts
+	$ loadkeys de-latin1 # This changes kbd layout to german
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Step 2: Check if you have UEFI or Legacy BIOS mode Enabled
+
+     	$ ls /sys/firmware/efi/efivars # if this dir exist ? UEFI : BIOS
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Step 3: Partition The Disks
+
+     	Utils: fdisk, cfdisk
+
+	++++++++++++++++++++++++++++++++ UEFI ++++++++++++++++++++++++++++++++++++
+	+ Create 512MB EFI partition at beginning     ++++++++ Format ++++++++++++
+	+ Change its Partition type to -> EFI System  + mkfs.fat -F32 /dev/sdx1  +
+	+ Create Root Partition	       	      	      + mkfs.ext4 /dev/sdx2      +
+	+ Create Swap Partition                       + mkswap /dev/sdx3         +
+	+ 	      				      ++++++++++++++++++++++++++++
+	+ Activate Swap				      $ swapon /dev/sdx3
+
+	++++++++++++++++++++++++++++++++ BIOS ++++++++++++++++++++++++++++++++++++
+	+					      ++++++++ Format ++++++++++++
+	+ Create Root Partition	       	      	      + mkfs.ext4 /dev/sdx2      +
+	+ Create Swap Partition                       + mkswap /dev/sdx3         +
+	+ 	      				      ++++++++++++++++++++++++++++
+	+ Activate Swap				      $ swapon /dev/sdx3
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Step 4: Connect to Internet
+
+     	Utils: wifi-menu
+
+	$ ping bing.com # Check If Internet Working
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Step 5: Update the System Clock
+
+     	$ timedatectl set-ntp true
+	$ timedatectl status
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Step 6: Select appropriate mirrors
+
+     	$ pacman -Syy
+	$ pacman -S reflector
+	$ cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak # Backup Orignal Mirrors
+	$ reflector -c "US" -f 12 -l 10 -n 12 --save /etc/pacman.d/mirrorlist
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Step 7: Mount file system
+
+	$ mount /dev/sdx2 /mnt # Mount Root Partition
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Step 8: Install essential Packages
+
+     	$ pacstrap /mnt base linux linux-firmware vim nano sudo
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++	
+Step 9: Generate fstab file
+
+     	$ genfstab -U /mnt >> /mnt/etc/fstab
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++	
+Step 10: chroot to installed system
+
+     	$ arch-chroot /mnt /bin/bash
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Step 11: Configure the System
+
+     	 +++++++++++++++++++++++++ Time zone ++++++++++++++++++++++++++
+     	 $ ln -sf /usr/share/zoneinfo/<Region>/<City> /etc/localtime # Change <Region> and <City> to Yours .i.e. Asia/Karachi
+	 $ hwclock --systohc                                         # generates /etc/adjtime
+
+     	 $ pacman -S emacs
+
+	 +++++++++++++++++++++++++ Localization +++++++++++++++++++++++
+	 $ emacs -nw /etc/locale.gen # Edit /etc/locale.gen and uncomment en_US.UTF-8 UTF-8 and other needed locales.
+	 $ locale-gen # Generate locales
+	 $ echo 'LANG=en_US.UTF-8' > /etc/locale.conf # Set the System Locale
+
+	 +++++++++++++++++++++++++ Keyboard conf ++++++++++++++++++++++
+	 # If you set the keyboard layout, make the changes persistent in /etc/vconsole.conf:
+	 $ echo 'KEYMAP=de-latin1' > /etc/vconsole.conf
+
+	 +++++++++++++++++++++++++ Hostname ++++++++++++++++++++++++++++
+	 $ echo '<Hostname>' > /etc/hostname # create your hostname
+	 $ echo '127.0.0.1	localhost' > /etc/hosts
+	 $ echo '::1		localhost' >> /etc/hosts
+	 $ echo '127.0.1.1	myhostname.localdomain	myhostname' >> /etc/hosts
+	 $ emacs -nw /etc/hosts # Edit hosts and change hostname to your hostname
+
+	 ++++++++++++++++++++++++ Set Up Root Password +++++++++++++++++++
+	 $ password
+
+	 ++++++++++++++++++++++++ Create New User ++++++++++++++++++++++++
+	 $ useradd -m -g users -G wheel -s /bin/bash <username>
+	 $ passwd username
+	 $ EDITOR=nano visudo              +++++++++++++++++++++++++++++++
+					   | Uncomment The Following Line
+					   | %wheel ALL=(ALL) ALL
+					   +++++++++++++++++++++++++++++++
+
+	 +++++++++++++++++++ Install Network Manager +++++++++++++++++++++
+	 $ pacman -S networkmanager dhcpcd networkmanager-vpnc network-manager-applet
+	 $ systemctl enable NetworkManager
+	 $ systemctl enable dhcpcd@<Network Interface>.service # Network Interface i.e. eth0
+
+	 ++++++++++++++++++++++++ Wireless Tools +++++++++++++++++++++++++
+	 $ pacman -S wireless_tools wpa_supplicant dialog
+	 $ systemctl enable net-auto-wireless.service
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Step 12: Install Grub
+
+     	 $ pacman -S grub
+
+     	 +++++++++++++++++ UEFI ++++++++++++++++++++++++++
+     	 | $ pacman -S efibootmgr
+	 | $ mkdir /boot/efi
+	 | $ mount /dev/sda1 /boot/efi
+	 | $ grub-install --target=x86_64-efi --bootloader-id=GRUB --efi-directory=/boot/efi
+	 +++++++++++++++++++++++++++++++++++++++++++++++++
+	 
+	 +++++++++++++++++ BIOS ++++++++++++++++++++++++++
+	 | $ grub-install /dev/sda
+	 +++++++++++++++++++++++++++++++++++++++++++++++++
+
+	 $ grub-mkconfig -o /boot/grub/grub.cfg
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Step 13: Install X Server
+
+     	 $ pacman -S xorg
+
+	 +++++++++++++++++++++ GNOME ++++++++++++++++++++++
+	 $ pacman -S gnome
+	 $ systemctl enable gdm.service
+	 $ systemctl start gdm.service
+	 $ systemctl enable NetworkManager.service
+
+	 ++++++++++++++++++++++ KDE +++++++++++++++++++++++
+	 $ pacman -S plasma plasma-wayland-session kde-applications
+	 $ systemctl enable sddm.service
+	 $ systemctl enable NetworkManager.service
+
+	 
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Step 14: Reboot
+
+     	 $ exit & reboot
+     	 
